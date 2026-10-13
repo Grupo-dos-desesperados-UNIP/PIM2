@@ -75,13 +75,24 @@ void cadastrar(void) {
 }
 
 void listar(void) {
-    /*
-     * TODO (Mostrar os agentes) [RESPONSAVEL: Dev 3 - Consulta]:
-     * 1. Se total for 0, avisar que a lista esta vazia.
-     * 2. Senao, usar um for de 0 ate total - 1.
-     * 3. Em cada volta, mostrar de forma organizada:
-     *    id, nome, modelo, prompt, temperatura e tokens.
-     */
+    if (total == 0){
+        printf("\nNenhum agente cadastrado!\n");
+        return;
+    }
+    printf("\n=====================================\n");
+    printf("\n         - AGENTES CADASTRADOS -      \n");
+    printf("\n=====================================\n");
+
+    for (int i = 0; i < total; i++) {
+        printf("ID: %d\n", ids[i]);
+        printf("Nome: %s\n", nomes[i]);
+        printf("Modelo: %s\n", modelos[i]);
+        printf("Prompt: %s\n", prompts[i]);
+        printf("Temperatura: %.1f\n", temperaturas[i]);
+        printf("Tokens: %d\n", tokens[i]);
+    }
+    printf("\n=====================================\n");
+
 }
 
 void editar(void) {
