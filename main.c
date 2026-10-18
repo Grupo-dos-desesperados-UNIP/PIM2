@@ -75,6 +75,30 @@ void carregar_arquivo(void) {
      * 5. Incrementar total++ a cada agente carregado, respeitando o limite MAX_AGENTES.
      * 6. Fechar o arquivo com fclose.
      */
+
+    FILE *arquivo = fopen(NOME_ARQUIVO, "r");
+
+    if (arquivo == NULL) {
+        perror ("Não foi possível abrir o arquivo");
+        return;
+    } else {
+        char linha[TAM_NOME + TAM_INSTRUCOES + 64];
+        
+        while(total < MAX_AGENTES && fgets(linha, sizeof(linha), arquivo) != NULL) {
+            int lidos = sscanf(linha, "%d;%80[^;];%1000[^;];%f",
+                    &ids[total],
+                    nomes[total],
+                    instrucoes[total],
+                    &notas[total]);
+        
+        if (lidos == 4) {
+            total++;
+        } else {
+            fprintf(stderr, "Linha inválida ignorada: %s", linha);
+        }
+    }
+    fclose(arquivo);
+    }
 }
 
 void salvar_arquivo(void) {
@@ -87,7 +111,21 @@ void salvar_arquivo(void) {
      *    - Gravar a nota com precisão de uma casa decimal (ex: %.1f).
      * 4. Fechar o arquivo com fclose ao término.
      */
+    
+    FILE *arquivo = fopen(NOME_ARQUIVO, "w");
+    
+    if (arquivo == NULL) {
+        perror("Erro ao abrir o arquivo");
+        return;
+    }
+    for (int i = 0; i < total; i++) {
+        fprintf(arquivo,"%d;%s;%s; %.1f\n", 
+            ids[i], nomes[i], instrucoes[i], notas[i]);
+    }
+    fclose(arquivo);
 }
+    
+
 
 /* =========================================================================
  * CADASTRO E LISTAGEM
