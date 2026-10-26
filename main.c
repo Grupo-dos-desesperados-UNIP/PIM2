@@ -165,6 +165,21 @@ void listar_agentes(void) {
      *    - NOTA atribuída ao agente (exibida formatada: %.1f de 5.0).
      * 4. Exibir o total geral de agentes cadastrados.
      */
+    int i;
+
+    if (total == 0) {
+        printf("\nO catalogo esta vazio.\n");
+        return;
+    }
+
+    printf("\n========== AGENTES CADASTRADOS ==========\n");
+    for (i = 0; i < total; i++) {
+        printf("\nID: %d\n", ids[i]);
+        printf("Nome: %s\n", nomes[i]);
+        printf("Script / Instrucoes: %s\n", instrucoes[i]);
+        printf("Nota: %.1f de 5.0\n", notas[i]);
+    }
+    printf("\nTotal de agentes cadastrados: %d\n", total);
 }
 
 /* =========================================================================
@@ -180,6 +195,11 @@ void exibir_ficha_agente(int indice) {
      *    - Script/Instruções: instrucoes[indice]
      *    - Nota: notas[indice] (ex: 4.5 / 5.0)
      */
+    printf("\n========== FICHA DO AGENTE ==========\n");
+    printf("ID: %d\n", ids[indice]);
+    printf("Nome: %s\n", nomes[indice]);
+    printf("Script / Instrucoes: %s\n", instrucoes[indice]);
+    printf("Nota: %.1f / 5.0\n", notas[indice]);
 }
 
 void editar_agente(int indice) {
