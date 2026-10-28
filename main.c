@@ -42,23 +42,37 @@ void limpar_buffer(void) {
     }
 }
 
+/* 
+ * Leitura de texto segura (com espacos):
+ * - fgets(): Le o texto digitado ate o Enter ou o limite maximo de caracteres.
+ * - O laco for percorre a string para encontrar a quebra de linha ('\n')
+ *   deixada pelo fgets e substitui por '\0' (fim de string limpa).
+ */
 void ler_texto(char *destino, int tamanho_max) {
-    /* 
-     * TODO [Entrada Segura de Texto com Espaços]:
-     * - Usar fgets(destino, tamanho_max, stdin) para ler nomes e scripts com espaços.
-     * - Remover o '\n' gerado pelo fgets trocando-o por '\0'.
-     * - Se o texto exceder o tamanho máximo e não houver '\n', chamar limpar_buffer().
-     */
+    fgets(destino, tamanho_max, stdin);
+
+    /* Percorre letra por letra ate achar o Enter (\n) e troca por \0 */
+    for (int i = 0; destino[i] != '\0'; i++) {
+        if (destino[i] == '\n') {
+            destino[i] = '\0';
+            break;
+        }
+    }
 }
 
+/* 
+ * Verificacao de ID duplicado (Busca Linear Simples):
+ * - Percorre o vetor ids[] desde a posicao 0 ate a posicao (total - 1).
+ * - Se encontrar um ID igual, retorna 1 (o ID ja existe).
+ * - Se terminar o laco sem encontrar, retorna 0 (o ID esta disponivel).
+ */
 int id_ja_existe(int id_verificar) {
-    /* 
-     * TODO [Validação de ID Único]:
-     * - Percorrer o vetor ids de 0 até total - 1.
-     * - Se ids[i] == id_verificar, retornar 1 (já existe).
-     * - Se o laço encerrar sem encontrar correspondência, retornar 0 (disponível).
-     */
-    return 0;
+    for (int i = 0; i < total; i++) {
+        if (ids[i] == id_verificar) {
+            return 1; /* Ja existe */
+        }
+    }
+    return 0; /* Disponivel */
 }
 
 /* =========================================================================
