@@ -31,10 +31,15 @@ int total = 0;
 
 void limpar_buffer(void) {
     /* 
-     * TODO [Limpeza de Buffer]:
+     * [Limpeza de Buffer]:
      * - Consumir caracteres com getchar() em um while até achar '\n' ou EOF.
      * - Evita que 'Enters' pendentes de scanf pulem a leitura de textos seguintes.
      */
+     int c;
+    /* Consome todos os caracteres restantes na entrada ate o Enter (\n) ou fim de arquivo */
+    while ((c = getchar()) != '\n' && c != EOF) {
+        /* descarta */
+    }
 }
 
 void ler_texto(char *destino, int tamanho_max) {
