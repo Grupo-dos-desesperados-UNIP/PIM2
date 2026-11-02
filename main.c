@@ -4,13 +4,16 @@
 
 /* =========================================================================
  * PROJETO INTEGRADO MULTIDISCIPLINAR II (PIM II) - UNIP
+ * CURSO: CST em Análise e Desenvolvimento de Sistemas
  * TEMA: AI Agent Registry (Catálogo e Gerenciador de Agentes de IA)
  * 
- * VETORES PARALELOS (MÁXIMO 50 REGISTROS):
+ * ESPECIFICAÇÃO DE DADOS (VETORES PARALELOS):
  * - ids[]: Identificador único (int)
- * - nomes[][81]: Nome do agente (até 80 caracteres + '\0')
- * - instrucoes[][1001]: Script/prompts (até 1000 caracteres + '\0')
- * - notas[]: Avaliação da qualidade do agente (float/int de 0.0 a 5.0)
+ * - nomes[][81]: Nome do agente (até 80 caracteres úteis + '\0')
+ * - instrucoes[][1001]: Script/instruções em entrada única (até 1.000 caracteres úteis + '\0')
+ * - notas[]: Avaliação da qualidade do agente (float, validada de 0.0 a 5.0)
+ * Capacidade máxima: 50 registros simultâneos.
+ * Diferencial de negócio: Filtros dinâmicos por nota mínima e nota máxima.
  * ========================================================================= */
 
 #define MAX_AGENTES 50
@@ -18,281 +21,458 @@
 #define TAM_INSTRUCOES 1001
 #define NOME_ARQUIVO "agentes.txt"
 
-/* --- Vetores Paralelos e Controle de Registros --- */
+/* --- Vetores Paralelos e Controle Global --- */
 int ids[MAX_AGENTES];
 char nomes[MAX_AGENTES][TAM_NOME];
 char instrucoes[MAX_AGENTES][TAM_INSTRUCOES];
-float notas[MAX_AGENTES]; /* Vetor obrigatório de notas de 0 a 5 */
+float notas[MAX_AGENTES];
 int total = 0;
 
 /* =========================================================================
- * UTILITÁRIOS E LEITURA DE DADOS
+ * UTILITÁRIOS E TRATAMENTO DE ENTRADA (I/O)
  * ========================================================================= */
 
+/* Descarta caracteres remanescentes no buffer de entrada (stdin) */
 void limpar_buffer(void) {
-    /* 
-     * [Limpeza de Buffer]:
-     * - Consumir caracteres com getchar() em um while até achar '\n' ou EOF.
-     * - Evita que 'Enters' pendentes de scanf pulem a leitura de textos seguintes.
-     */
-     int c;
-    /* Consome todos os caracteres restantes na entrada ate o Enter (\n) ou fim de arquivo */
+    int c;
     while ((c = getchar()) != '\n' && c != EOF) {
-        /* descarta */
+        /* Apenas consome o fluxo pendente */
     }
 }
 
-/* 
- * Leitura de texto segura (com espacos):
- * - fgets(): Le o texto digitado ate o Enter ou o limite maximo de caracteres.
- * - O laco for percorre a string para encontrar a quebra de linha ('\n')
- *   deixada pelo fgets e substitui por '\0' (fim de string limpa).
- */
+/* Leitura segura com fgets, removendo a quebra de linha (\n) e limpando estouro */
 void ler_texto(char *destino, int tamanho_max) {
-    fgets(destino, tamanho_max, stdin);
-
-    /* Percorre letra por letra ate achar o Enter (\n) e troca por \0 */
-    for (int i = 0; destino[i] != '\0'; i++) {
-        if (destino[i] == '\n') {
-            destino[i] = '\0';
-            break;
+    if (fgets(destino, tamanho_max, stdin) != NULL) {
+        size_t len = strlen(destino);
+        if (len > 0 && destino[len - 1] == '\n') {
+            destino[len - 1] = '\0';
+        } else {
+            /* Se o texto digitado excedeu o tamanho máximo, limpa o restante do buffer */
+            limpar_buffer();
         }
     }
 }
 
-/* 
- * Verificacao de ID duplicado (Busca Linear Simples):
- * - Percorre o vetor ids[] desde a posicao 0 ate a posicao (total - 1).
- * - Se encontrar um ID igual, retorna 1 (o ID ja existe).
- * - Se terminar o laco sem encontrar, retorna 0 (o ID esta disponivel).
- */
+/* Sanitiza o texto para o arquivo: substitui ';' por ',' para nao corromper delimitadores */
+void sanitizar_delimitador(char *texto) {
+    for (int i = 0; texto[i] != '\0'; i++) {
+        if (texto[i] == ';') {
+            texto[i] = ',';
+        }
+    }
+}
+
+/* Busca linear para validação de unicidade de ID */
 int id_ja_existe(int id_verificar) {
     for (int i = 0; i < total; i++) {
         if (ids[i] == id_verificar) {
-            return 1; /* Ja existe */
+            return 1; /* Já cadastrado */
         }
     }
-    return 0; /* Disponivel */
+    return 0; /* Disponível */
 }
 
 /* =========================================================================
  * PERSISTÊNCIA EM ARQUIVO (TXT)
  * ========================================================================= */
 
-void carregar_arquivo(void) {
-    /* 
-     * TODO [Persistência - Leitura Inicial do Arquivo]:
-     * 1. Abrir NOME_ARQUIVO em modo leitura ("r") com fopen.
-     * 2. Se for NULL, emitir aviso de que o arquivo ainda não existe (início com total = 0).
-     * 3. Se abrir com sucesso, executar um laço lendo cada linha com separador (ex: ';' ou '\n').
-     *    - Cada registro deve carregar: ID, Nome, Script/Instruções e a NOTA do agente.
-     * 4. Preencher na posição [total]:
-     *    - ids[total]
-     *    - nomes[total]
-     *    - instrucoes[total]
-     *    - notas[total] (convertido para float)
-     * 5. Incrementar total++ a cada agente carregado, respeitando o limite MAX_AGENTES.
-     * 6. Fechar o arquivo com fclose.
-     */
-
-    FILE *arquivo = fopen(NOME_ARQUIVO, "r");
-
+/* Grava todos os vetores paralelos em disco formatados por ';' */
+void salvar_arquivo(void) {
+    FILE *arquivo = fopen(NOME_ARQUIVO, "w");
     if (arquivo == NULL) {
-        perror ("Não foi possível abrir o arquivo");
+        printf("\n[Erro] Nao foi possivel abrir o arquivo para gravacao.\n");
         return;
-    } else {
-        char linha[TAM_NOME + TAM_INSTRUCOES + 64];
-        
-        while(total < MAX_AGENTES && fgets(linha, sizeof(linha), arquivo) != NULL) {
-            int lidos = sscanf(linha, "%d;%80[^;];%1000[^;];%f",
-                    &ids[total],
-                    nomes[total],
-                    instrucoes[total],
-                    &notas[total]);
-        
-        if (lidos == 4) {
+    }
+
+    for (int i = 0; i < total; i++) {
+        fprintf(arquivo, "%d;%s;%s;%.1f\n", ids[i], nomes[i], instrucoes[i], notas[i]);
+    }
+
+    fclose(arquivo);
+}
+
+/* Carrega os registros do arquivo texto na memória RAM de forma segura */
+void carregar_arquivo(void) {
+    FILE *arquivo = fopen(NOME_ARQUIVO, "r");
+    if (arquivo == NULL) {
+        /* Primeira execução ou arquivo inexistente: inicia catálogo com total = 0 */
+        return;
+    }
+
+    char linha[TAM_NOME + TAM_INSTRUCOES + 128];
+    total = 0;
+
+    while (total < MAX_AGENTES && fgets(linha, sizeof(linha), arquivo) != NULL) {
+        size_t len = strlen(linha);
+        if (len > 0 && linha[len - 1] == '\n') {
+            linha[len - 1] = '\0';
+        }
+
+        /* Divisão segura por ponteiros (delimitador ';') */
+        char *p_id = strtok(linha, ";");
+        char *p_nome = strtok(NULL, ";");
+        char *p_instrucoes = strtok(NULL, ";");
+        char *p_nota = strtok(NULL, ";");
+
+        if (p_id && p_nome && p_instrucoes && p_nota) {
+            ids[total] = atoi(p_id);
+            strncpy(nomes[total], p_nome, TAM_NOME - 1);
+            nomes[total][TAM_NOME - 1] = '\0';
+
+            strncpy(instrucoes[total], p_instrucoes, TAM_INSTRUCOES - 1);
+            instrucoes[total][TAM_INSTRUCOES - 1] = '\0';
+
+            notas[total] = atof(p_nota);
             total++;
-        } else {
-            fprintf(stderr, "Linha inválida ignorada: %s", linha);
         }
     }
-    fclose(arquivo);
-    }
-}
 
-void salvar_arquivo(void) {
-    /* 
-     * TODO [Persistência - Gravação em Disco]:
-     * 1. Abrir NOME_ARQUIVO em modo escrita ("w") com fopen.
-     * 2. Se for NULL, acusar erro de abertura de arquivo.
-     * 3. Executar laço for de 0 até total - 1 gravando linha a linha com fprintf:
-     *    - Formato: id;nome;instrucoes;nota\n
-     *    - Gravar a nota com precisão de uma casa decimal (ex: %.1f).
-     * 4. Fechar o arquivo com fclose ao término.
-     */
-    
-    FILE *arquivo = fopen(NOME_ARQUIVO, "w");
-    
-    if (arquivo == NULL) {
-        perror("Erro ao abrir o arquivo");
-        return;
-    }
-    for (int i = 0; i < total; i++) {
-        fprintf(arquivo,"%d;%s;%s; %.1f\n", 
-            ids[i], nomes[i], instrucoes[i], notas[i]);
-    }
     fclose(arquivo);
 }
-    
-
 
 /* =========================================================================
- * CADASTRO E LISTAGEM
+ * OPERAÇÕES: CADASTRO E LISTAGEM
  * ========================================================================= */
 
 void cadastrar_agente(void) {
-    /* 
-     * TODO [Operação: Cadastro de Agente]:
-     * 1. Validar se total < MAX_AGENTES. Se total == 50, alertar limite e voltar.
-     * 2. Solicitar o ID:
-     *    - Ler com scanf e validar se o ID é positivo.
-     *    - Usar id_ja_existe() em um laço while para impedir duplicidade de identificador.
-     * 3. Solicitar o Nome do agente (até 80 caracteres) usando ler_texto().
-     * 4. Solicitar o Script/Instruções (até 1000 caracteres, entrada única) usando ler_texto().
-     * 5. Solicitar a NOTA do agente:
-     *    - Exigir nota no intervalo entre 0.0 e 5.0.
-     *    - Executar laço do-while que repete a pergunta enquanto o valor for < 0.0 ou > 5.0.
-     * 6. Atribuir os dados recebidos aos vetores paralelos na posição [total]:
-     *    - ids[total] = id_lido;
-     *    - strcpy(nomes[total], nome_lido);
-     *    - strcpy(instrucoes[total], instrucoes_lidas);
-     *    - notas[total] = nota_lida;
-     * 7. Incrementar total++.
-     * 8. Chamar salvar_arquivo() para manter o arquivo de texto sincronizado.
-     */
-}
+    int id_lido;
+    char nome_lido[TAM_NOME];
+    char instrucoes_lidas[TAM_INSTRUCOES];
+    float nota_lida;
 
-void listar_agentes(void) {
-    /* 
-     * TODO [Operação: Listagem Geral]:
-     * 1. Se total == 0, informar que o catálogo está vazio e retornar.
-     * 2. Imprimir cabeçalho formatado na tela.
-     * 3. Percorrer os vetores de 0 até total - 1 exibindo:
-     *    - ID do agente;
-     *    - Nome do agente;
-     *    - Script / Instruções cadastradas;
-     *    - NOTA atribuída ao agente (exibida formatada: %.1f de 5.0).
-     * 4. Exibir o total geral de agentes cadastrados.
-     */
-    int i;
-
-    if (total == 0) {
-        printf("\nO catalogo esta vazio.\n");
+    if (total >= MAX_AGENTES) {
+        printf("\n[Aviso] Capacidade maxima de %d agentes atingida!\n", MAX_AGENTES);
         return;
     }
 
-    printf("\n========== AGENTES CADASTRADOS ==========\n");
-    for (i = 0; i < total; i++) {
-        printf("\nID: %d\n", ids[i]);
-        printf("Nome: %s\n", nomes[i]);
-        printf("Script / Instrucoes: %s\n", instrucoes[i]);
-        printf("Nota: %.1f de 5.0\n", notas[i]);
+    printf("\n=========================================\n");
+    printf("        CADASTRAR NOVO AGENTE DE IA      \n");
+    printf("=========================================\n");
+
+    /* 1. ID único */
+    do {
+        printf("Digite o ID do Agente (numero positivo): ");
+        if (scanf("%d", &id_lido) != 1) {
+            limpar_buffer();
+            id_lido = -1;
+            printf("[Erro] Entrada invalida. Digite apenas numeros inteiros.\n");
+            continue;
+        }
+        limpar_buffer();
+
+        if (id_lido <= 0) {
+            printf("[Erro] O ID deve ser estritamente positivo.\n");
+        } else if (id_ja_existe(id_lido)) {
+            printf("[Erro] O ID %d ja se encontra cadastrado. Escolha outro.\n", id_lido);
+        }
+    } while (id_lido <= 0 || id_ja_existe(id_lido));
+
+    /* 2. Nome do Agente (até 80 caracteres) */
+    printf("Digite o nome do Agente (max %d caracteres): ", TAM_NOME - 1);
+    ler_texto(nome_lido, TAM_NOME);
+    sanitizar_delimitador(nome_lido);
+
+    /* 3. Script/Instruções (até 1.000 caracteres em entrada única) */
+    printf("Digite o Script / Instrucoes do Agente (max %d caracteres):\n", TAM_INSTRUCOES - 1);
+    ler_texto(instrucoes_lidas, TAM_INSTRUCOES);
+    sanitizar_delimitador(instrucoes_lidas);
+
+    /* 4. Nota (de 0.0 a 5.0) */
+    do {
+        printf("Digite a nota de avaliacao (0.0 a 5.0): ");
+        if (scanf("%f", &nota_lida) != 1) {
+            limpar_buffer();
+            nota_lida = -1.0f;
+            printf("[Erro] Digite um numero valido para a nota (ex.: 4.5).\n");
+            continue;
+        }
+        limpar_buffer();
+
+        if (nota_lida < 0.0f || nota_lida > 5.0f) {
+            printf("[Erro] Nota fora da faixa permitida (0.0 a 5.0).\n");
+        }
+    } while (nota_lida < 0.0f || nota_lida > 5.0f);
+
+    /* Gravação nos vetores paralelos */
+    ids[total] = id_lido;
+    strcpy(nomes[total], nome_lido);
+    strcpy(instrucoes[total], instrucoes_lidas);
+    notas[total] = nota_lida;
+    total++;
+
+    salvar_arquivo();
+    printf("\n[Sucesso] Agente '%s' registrado e salvo em arquivo com sucesso!\n", nome_lido);
+}
+
+void listar_agentes(void) {
+    if (total == 0) {
+        printf("\n[Aviso] O catalogo esta vazio. Nenhum agente cadastrado.\n");
+        return;
     }
-    printf("\nTotal de agentes cadastrados: %d\n", total);
+
+    printf("\n=================================================================================\n");
+    printf("                         CATALOGO GERAL DE AGENTES DE IA                         \n");
+    printf("=================================================================================\n");
+    for (int i = 0; i < total; i++) {
+        printf("ID: %d | Nome: %s | Nota: %.1f/5.0\n", ids[i], nomes[i], notas[i]);
+        printf("Instrucoes: %s\n", instrucoes[i]);
+        printf("---------------------------------------------------------------------------------\n");
+    }
+    printf("Total de registros ativos: %d de %d\n", total, MAX_AGENTES);
 }
 
 /* =========================================================================
- * CONSULTAS, SUBMENU DE GERENCIAMENTO, EDIÇÃO E EXCLUSÃO
+ * RECURSO DIFERENCIAL (EXIGÊNCIA DE NEGÓCIO DO MANUAL)
+ * ========================================================================= */
+
+void filtrar_por_nota_minima(void) {
+    float corte;
+    int encontrados = 0;
+
+    if (total == 0) {
+        printf("\n[Aviso] O catalogo esta vazio.\n");
+        return;
+    }
+
+    printf("\n--- FILTRAR AGENTES POR NOTA MINIMA (DIFERENCIAL) ---\n");
+    printf("Digite a nota de corte desejada (0.0 a 5.0): ");
+    if (scanf("%f", &corte) != 1) {
+        limpar_buffer();
+        printf("[Erro] Entrada numerica invalida.\n");
+        return;
+    }
+    limpar_buffer();
+
+    printf("\n=================================================================================\n");
+    printf("               AGENTES COM AVALIACAO IGUAL OU SUPERIOR A %.1f                    \n", corte);
+    printf("=================================================================================\n");
+
+    for (int i = 0; i < total; i++) {
+        if (notas[i] >= corte) {
+            printf("ID: %-4d | Nome: %-25s | Nota: %.1f\n", ids[i], nomes[i], notas[i]);
+            printf("Script: %s\n", instrucoes[i]);
+            printf("---------------------------------------------------------------------------------\n");
+            encontrados++;
+        }
+    }
+
+    if (encontrados == 0) {
+        printf("Nenhum agente localizado com nota maior ou igual a %.1f.\n", corte);
+    } else {
+        printf("Total de agentes encontrados no filtro: %d\n", encontrados);
+    }
+}
+
+void filtrar_por_nota_maxima(void) {
+    float teto;
+    int encontrados = 0;
+
+    if (total == 0) {
+        printf("\n[Aviso] O catalogo esta vazio.\n");
+        return;
+    }
+
+    printf("\n--- FILTRAR AGENTES POR NOTA MAXIMA (TETO) ---\n");
+    printf("Digite a nota maxima desejada (0.0 a 5.0): ");
+    if (scanf("%f", &teto) != 1) {
+        limpar_buffer();
+        printf("[Erro] Entrada numerica invalida.\n");
+        return;
+    }
+    limpar_buffer();
+
+    printf("\n=================================================================================\n");
+    printf("               AGENTES COM AVALIACAO IGUAL OU INFERIOR A %.1f                    \n", teto);
+    printf("=================================================================================\n");
+
+    for (int i = 0; i < total; i++) {
+        if (notas[i] <= teto) {
+            printf("ID: %-4d | Nome: %-25s | Nota: %.1f\n", ids[i], nomes[i], notas[i]);
+            printf("Script: %s\n", instrucoes[i]);
+            printf("---------------------------------------------------------------------------------\n");
+            encontrados++;
+        }
+    }
+
+    if (encontrados == 0) {
+        printf("Nenhum agente localizado com nota menor ou igual a %.1f.\n", teto);
+    } else {
+        printf("Total de agentes encontrados no filtro: %d\n", encontrados);
+    }
+}
+
+/* =========================================================================
+ * DETALHES, SUBMENU, EDIÇÃO E EXCLUSÃO (SHIFT)
  * ========================================================================= */
 
 void exibir_ficha_agente(int indice) {
-    /* 
-     * TODO [Exibição Detalhada do Registro Localizado]:
-     * 1. Imprimir bloco com todos os dados do agente localizado no índice:
-     *    - ID: ids[indice]
-     *    - Nome: nomes[indice]
-     *    - Script/Instruções: instrucoes[indice]
-     *    - Nota: notas[indice] (ex: 4.5 / 5.0)
-     */
-    printf("\n========== FICHA DO AGENTE ==========\n");
-    printf("ID: %d\n", ids[indice]);
-    printf("Nome: %s\n", nomes[indice]);
-    printf("Script / Instrucoes: %s\n", instrucoes[indice]);
-    printf("Nota: %.1f / 5.0\n", notas[indice]);
+    if (indice < 0 || indice >= total) {
+        return;
+    }
+
+    printf("\n=================================================================================\n");
+    printf("                              FICHA DO AGENTE DE IA                              \n");
+    printf("=================================================================================\n");
+    printf("ID:                  %d\n", ids[indice]);
+    printf("Nome:                %s\n", nomes[indice]);
+    printf("Nota:                %.1f de 5.0\n", notas[indice]);
+    printf("---------------------------------------------------------------------------------\n");
+    printf("Script / Instrucoes:\n%s\n", instrucoes[indice]);
+    printf("=================================================================================\n");
 }
 
 void editar_agente(int indice) {
-    /* 
-     * TODO [Operação: Edição de Dados]:
-     * 1. Informar os campos permitidos para alteração (Nome, Script e Nota).
-     *    (O ID é mantido inalterado para preservar a chave primária).
-     * 2. Ler novo Nome e atualizar em nomes[indice].
-     * 3. Ler novo Script/Instruções e atualizar em instrucoes[indice].
-     * 4. Ler nova NOTA do agente:
-     *    - Validar obrigatoriamente se a nova nota permanece entre 0.0 e 5.0.
-     *    - Atualizar notas[indice] com o novo valor.
-     * 5. Chamar salvar_arquivo() para persistir a modificação.
-     * 6. Informar ao usuário que a atualização foi concluída com sucesso.
-     */
+    float nova_nota;
+
+    printf("\n--- EDITANDO REGISTRO (ID: %d) ---\n", ids[indice]);
+
+    printf("Digite o novo Nome: ");
+    ler_texto(nomes[indice], TAM_NOME);
+    sanitizar_delimitador(nomes[indice]);
+
+    printf("Digite o novo Script / Instrucoes:\n");
+    ler_texto(instrucoes[indice], TAM_INSTRUCOES);
+    sanitizar_delimitador(instrucoes[indice]);
+
+    do {
+        printf("Digite a nova Nota (0.0 a 5.0): ");
+        if (scanf("%f", &nova_nota) != 1) {
+            limpar_buffer();
+            nova_nota = -1.0f;
+            printf("[Erro] Valor invalido.\n");
+            continue;
+        }
+        limpar_buffer();
+
+        if (nova_nota < 0.0f || nova_nota > 5.0f) {
+            printf("[Erro] Nota fora da faixa permitida (0.0 a 5.0).\n");
+        }
+    } while (nova_nota < 0.0f || nova_nota > 5.0f);
+
+    notas[indice] = nova_nota;
+
+    salvar_arquivo();
+    printf("\n[Sucesso] Registro atualizado e persistido com sucesso!\n");
 }
 
 void excluir_agente(int indice) {
-    /* 
-     * TODO [Operação: Exclusão com Deslocamento de Vetores Paralelos]:
-     * 1. Pedir confirmação do usuário (S/N) antes de remover.
-     * 2. Se confirmado:
-     *    - Executar laço for de j = indice até total - 2.
-     *    - Puxar todos os elementos da posição j + 1 para a posição j em TODOS os vetores:
-     *        ids[j] = ids[j + 1];
-     *        strcpy(nomes[j], nomes[j + 1]);
-     *        strcpy(instrucoes[j], instrucoes[j + 1]);
-     *        notas[j] = notas[j + 1];  <-- Deslocar a nota para fechar a lacuna
-     *    - Decrementar o contador global: total--;
-     *    - Chamar salvar_arquivo() para consolidar a remoção no txt.
-     *    - Exibir mensagem informando a exclusão.
-     * 3. Se cancelado, abortar o processo e retornar.
-     */
+    char confirmacao;
+
+    printf("\nConfirma a exclusao definitiva do agente '%s' (ID: %d)? (S/N): ", nomes[indice], ids[indice]);
+    if (scanf(" %c", &confirmacao) != 1) {
+        limpar_buffer();
+        return;
+    }
+    limpar_buffer();
+
+    if (confirmacao == 'S' || confirmacao == 's') {
+        /* Desloca todos os registros posteriores uma posição à esquerda (shift) */
+        for (int j = indice; j < total - 1; j++) {
+            ids[j] = ids[j + 1];
+            strcpy(nomes[j], nomes[j + 1]);
+            strcpy(instrucoes[j], instrucoes[j + 1]);
+            notas[j] = notas[j + 1];
+        }
+        total--;
+
+        salvar_arquivo();
+        printf("\n[Sucesso] Agente removido e arquivo sincronizado!\n");
+    } else {
+        printf("\n[Cancelado] Operacao de exclusao cancelada pelo usuario.\n");
+    }
 }
 
 void gerenciar_agente_encontrado(int indice) {
-    /* 
-     * TODO [Submenu Contextual Pós-Busca - Requisito do Manual]:
-     * 1. Chamar exibir_ficha_agente(indice) para mostrar a ficha completa (inclusive a nota).
-     * 2. Apresentar submenu com as opções:
-     *    [1] Editar dados do agente (incluindo nota)
-     *    [2] Excluir este agente
-     *    [0] Voltar ao menu principal
-     * 3. Ler a opção com validação de entrada.
-     * 4. Executar switch-case:
-     *    - Caso 1: Chamar editar_agente(indice) e reexibir a ficha atualizada.
-     *    - Caso 2: Chamar excluir_agente(indice) e quebrar o submenu (pois o registro foi apagado).
-     *    - Caso 0: Retornar ao menu principal.
-     */
+    int opcao;
+
+    exibir_ficha_agente(indice);
+
+    do {
+        printf("\n--- GERENCIAR AGENTE LOCALIZADO ---\n");
+        printf("1. Editar dados do agente\n");
+        printf("2. Excluir este agente\n");
+        printf("0. Voltar ao menu principal\n");
+        printf("Escolha uma acao: ");
+
+        if (scanf("%d", &opcao) != 1) {
+            limpar_buffer();
+            opcao = -1;
+            continue;
+        }
+        limpar_buffer();
+
+        switch (opcao) {
+            case 1:
+                editar_agente(indice);
+                exibir_ficha_agente(indice);
+                break;
+            case 2:
+                excluir_agente(indice);
+                return; /* Retorna pois o registro foi deletado */
+            case 0:
+                return;
+            default:
+                printf("\nOpcao invalida. Digite 1, 2 ou 0.\n");
+                break;
+        }
+    } while (opcao != 0);
 }
 
+/* =========================================================================
+ * BUSCAS
+ * ========================================================================= */
+
 void buscar_por_id(void) {
-    /* 
-     * TODO [Operação: Busca por ID]:
-     * 1. Se total == 0, avisar catálogo vazio e retornar.
-     * 2. Solicitar o ID desejado ao usuário.
-     * 3. Percorrer o vetor ids de 0 até total - 1.
-     * 4. Se ids[i] == id_digitado:
-     *    - Acionar gerenciar_agente_encontrado(i).
-     *    - Encerrar a busca.
-     * 5. Se o laço terminar sem encontrar, informar que o ID não foi cadastrado.
-     */
+    int id_procurado;
+
+    if (total == 0) {
+        printf("\n[Aviso] O catalogo esta vazio.\n");
+        return;
+    }
+
+    printf("\n========== BUSCA POR ID ==========\n");
+    printf("Digite o ID que deseja pesquisar: ");
+    if (scanf("%d", &id_procurado) != 1) {
+        limpar_buffer();
+        printf("\n[Erro] Entrada invalida. Digite um numero inteiro.\n");
+        return;
+    }
+    limpar_buffer();
+
+    for (int i = 0; i < total; i++) {
+        if (ids[i] == id_procurado) {
+            gerenciar_agente_encontrado(i);
+            return;
+        }
+    }
+
+    printf("\n[Aviso] Nenhum agente encontrado com o ID %d.\n", id_procurado);
 }
 
 void buscar_por_nome(void) {
-    /* 
-     * TODO [Operação: Busca por Nome]:
-     * 1. Se total == 0, avisar catálogo vazio e retornar.
-     * 2. Solicitar o nome ou fragmento a ser pesquisado.
-     * 3. Percorrer o vetor nomes comparando com strstr() para permitir busca flexível.
-     * 4. Se localizar correspondência:
-     *    - Acionar gerenciar_agente_encontrado(i).
-     * 5. Se nenhuma ocorrência for encontrada, avisar que não há agente com o termo informado.
-     */
+    char termo[TAM_NOME];
+    int encontrados = 0;
+
+    if (total == 0) {
+        printf("\n[Aviso] O catalogo esta vazio.\n");
+        return;
+    }
+
+    printf("\n========== BUSCA POR NOME ==========\n");
+    printf("Digite o nome ou trecho do nome: ");
+    ler_texto(termo, TAM_NOME);
+
+    for (int i = 0; i < total; i++) {
+        if (strstr(nomes[i], termo) != NULL) {
+            gerenciar_agente_encontrado(i);
+            encontrados++;
+            return; /* Localizou a primeira correspondência e abriu o gerenciador */
+        }
+    }
+
+    if (!encontrados) {
+        printf("\n[Aviso] Nenhum agente localizado com o termo '%s'.\n", termo);
+    }
 }
 
 /* =========================================================================
@@ -302,19 +482,19 @@ void buscar_por_nome(void) {
 int main(void) {
     int opcao = -1;
 
-    /* 
-     * TODO [Inicialização]:
-     * Executar carregar_arquivo() para recuperar os registros e notas salvos anteriormente.
-     */
+    /* Recupera os dados persistidos em disco antes de abrir a interface */
+    carregar_arquivo();
 
     do {
         printf("\n=========================================\n");
         printf("   AI AGENT REGISTRY - CATALOGO DE IA    \n");
         printf("=========================================\n");
         printf("1. Cadastrar Novo Agente\n");
-        printf("2. Listar Agentes Cadastrados\n");
+        printf("2. Listar Todos os Agentes\n");
         printf("3. Buscar Agente por ID\n");
         printf("4. Buscar Agente por Nome\n");
+        printf("5. Filtrar por Nota Minima\n");
+        printf("6. Filtrar por Nota Maxima\n");
         printf("0. Encerrar Programa\n");
         printf("-----------------------------------------\n");
         printf("Escolha uma opcao: ");
@@ -328,29 +508,31 @@ int main(void) {
 
         switch (opcao) {
             case 1:
-                /* TODO: Chamar cadastrar_agente(); */
+                cadastrar_agente();
                 break;
             case 2:
-                /* TODO: Chamar listar_agentes(); */
+                listar_agentes();
                 break;
             case 3:
-                /* TODO: Chamar buscar_por_id(); */
+                buscar_por_id();
                 break;
             case 4:
-                /* TODO: Chamar buscar_por_nome(); */
+                buscar_por_nome();
+                break;
+            case 5:
+                filtrar_por_nota_minima();
+                break;
+            case 6:
+                filtrar_por_nota_maxima();
                 break;
             case 0:
-                /* 
-                 * TODO [Finalização]:
-                 * Confirmar gravação com salvar_arquivo() antes da saída.
-                 */
-                printf("\nEncerrando o programa e sincronizando dados...\n");
+                salvar_arquivo();
+                printf("\nEncerrando o sistema. Dados sincronizados com sucesso!\n");
                 break;
             default:
-                printf("\nOpcao invalida. Digite uma opcao de 0 a 4.\n");
+                printf("\nOpcao invalida. Digite um numero de 0 a 6.\n");
                 break;
         }
-
     } while (opcao != 0);
 
     return 0;
