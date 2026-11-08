@@ -5,7 +5,7 @@
 /* =========================================================================
  * PROJETO INTEGRADO MULTIDISCIPLINAR II (PIM II) - UNIP
  * CURSO: CST em Análise e Desenvolvimento de Sistemas
- * TEMA: AI Agent Registry (Catálogo de Agentes de IA)
+ * TEMA: Compass.IA (Catálogo de Agentes de IA)
  * ========================================================================= */
 
 #define MAX_AGENTES 50
@@ -463,7 +463,7 @@ int main(void) {
 
     do {
         printf("\n=========================================\n");
-        printf("   AI AGENT REGISTRY - CATALOGO DE IA    \n");
+        printf("       Compass.IA - CATALOGO DE IA       \n");
         printf("=========================================\n");
         printf("1. Cadastrar Novo Agente\n");
         printf("2. Listar Todos os Agentes\n");
